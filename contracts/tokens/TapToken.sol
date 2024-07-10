@@ -370,7 +370,7 @@ contract TapToken is ERC20Permit, Pausable, Ownable {
     /**
      * @notice Return the current chain EID.
      */
-    function _getChainId() internal view returns (uint32) {
+    function _getChainId() internal pure returns (uint32) {
         return 1;
     }
 }
