@@ -4,3 +4,6 @@
 [submodule "lib/openzeppelin-contracts"]
 	path = lib/openzeppelin-contracts
 	url = https://github.com/openzeppelin/openzeppelin-contracts
+[submodule "lib/string-utils-lib"]
+	path = lib/string-utils-lib
+	url = https://github.com/OsoTega/string-utils-lib
