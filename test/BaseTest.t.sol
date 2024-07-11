@@ -120,7 +120,7 @@ contract TapTokenTest is Test {
     }
 
     function testExecute() external {
-        uint256 case_num = 2;
+        uint256 case_num = 3;
         uint256 version_num = 1;
         string memory ifname = string(abi.encodePacked("./results/inputfiles/test", vm.toString(case_num), ".csv"));
         string memory ofname = string(
