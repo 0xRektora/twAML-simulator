@@ -9,7 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // Tapioca
 import {TapToken, ITapToken} from "contracts/tokens/TapToken.sol";
-import {TwTAP, TWAMLPool} from "contracts/twTAP.sol";
+import {TwTAP, TWAMLPool, TWAML} from "contracts/twTAP2.sol";
 import {MockPearlmit} from "contracts/mocks/MockPearlmit.sol";
 import {MockCluster} from "contracts/mocks/MockCluster.sol";
 import {IPearlmit} from "contracts/interfaces/IPearlmit.sol";
@@ -20,7 +20,7 @@ import "forge-std/console.sol";
 import {StringUtilsLib} from "string-utils-lib/StringUtilsLib.sol";
 
 // TODO Split into multiple part?
-contract TapTokenTest is Test {
+contract TapTokenTest is Test, TWAML {
     using StringUtilsLib for string;
 
     uint32 aEid = 1;
@@ -148,6 +148,100 @@ contract TapTokenTest is Test {
         _dumpToFile(ofname, count, dump);
     }
 
+    function testMaxGrowth() external {
+        uint256 case_num = 1;
+        uint256 version_num = 2;
+        string memory ifname =
+            string(abi.encodePacked("./results/inputfiles/testMaximal", vm.toString(case_num), ".csv"));
+        string memory ofnameTWAML = string(
+            abi.encodePacked(
+                "./results/outputs/out_maxGrowthTWAML", vm.toString(case_num), "_v", vm.toString(version_num), ".csv"
+            )
+        );
+        string memory ofnameDeposits = string(
+            abi.encodePacked(
+                "./results/outputs/out_maxGrowthDeposits", vm.toString(case_num), "_v", vm.toString(version_num), ".csv"
+            )
+        );
+
+        string memory line = vm.readLine(ifname);
+        if (bytes(line).length == 0) {
+            return;
+        }
+
+        (uint256 timeskip, uint256 iterations, address user, uint256 initAmount,) = _processLine(line);
+        DataDump[] memory dump = new DataDump[](iterations);
+        DataDump[] memory dumpDeposits = new DataDump[](iterations);
+        uint256[] memory expirations = new uint256[](iterations);
+        uint256 expirycounter = 0;
+        timeskip = timeskip - baseTime;
+
+        for (uint256 i = 0; i < iterations; i++) {
+            uint256 timestamp = baseTime + i * timeskip;
+            uint256 amount;
+            uint256 duration;
+
+            {
+                (,, uint256 totalDeposited, uint256 cumulative) = _getTWAMLParams();
+
+                (bool success, bytes memory data) =
+                    address(twTap).call(abi.encodeWithSignature("lastEpochCumulative()"));
+
+                if (success) {
+                    cumulative = abi.decode(data, (uint256));
+                    if (cumulative == 0) {
+                        cumulative = EPOCH_DURATION;
+                    }
+                }
+
+                // Find minimum voting amount
+                amount = computeMinWeight(totalDeposited + twTap.VIRTUAL_TOTAL_AMOUNT(), twTap.MIN_WEIGHT_FACTOR());
+                if (initAmount > 0 && i == 0) amount = initAmount;
+                if (amount > 1e25) amount = 1e25;
+
+                // Get max duration
+                uint256 maxMagnitude = cumulative * 4 - 1;
+                uint256 MCsum = maxMagnitude + cumulative;
+                duration = sqrt(MCsum * MCsum - cumulative * cumulative) / EPOCH_DURATION * EPOCH_DURATION;
+                if (duration > twTap.MAX_LOCK_DURATION()) {
+                    duration = twTap.MAX_LOCK_DURATION() / EPOCH_DURATION * EPOCH_DURATION;
+                }
+            }
+
+            // Check expiry
+            while (timestamp > expirations[expirycounter] && i > 0 && expirycounter < i) {
+                _executeOp(timestamp, 2, address(uint160(expirycounter + 1)), 0, 0, i);
+                expirycounter++;
+            }
+
+            {
+                string memory log = string(
+                    abi.encodePacked(
+                        "It:",
+                        vm.toString(i),
+                        ", tstamp:",
+                        vm.toString(timestamp),
+                        ", amt:",
+                        vm.toString(amount / 1e18),
+                        " ETH TAP for weeks:",
+                        vm.toString(duration / EPOCH_DURATION)
+                    )
+                );
+                console.log(log);
+            }
+
+            uint256 tokenId = _executeOp(timestamp, 1, user, amount, duration, i);
+            (, bool voting,,,, uint256 expiry,,,,) = twTap.participants(tokenId);
+            expirations[tokenId - 1] = expiry;
+            (uint256 totalParticipants, uint256 averageMagnitude, uint256 totalDeposited, uint256 cumulative) =
+                _getTWAMLParams();
+            dump[i] = DataDump(timestamp, totalParticipants, averageMagnitude, totalDeposited, cumulative);
+            dumpDeposits[i] = DataDump(timestamp, voting ? 1 : 0, 0, amount / 1e18, duration / EPOCH_DURATION);
+        }
+        _dumpToFile(ofnameTWAML, iterations, dump);
+        _dumpToFile(ofnameDeposits, iterations, dumpDeposits);
+    }
+
     function _dumpToFile(string memory fname, uint256 count, DataDump[] memory dump) internal {
         string memory output;
 
@@ -177,7 +271,7 @@ contract TapTokenTest is Test {
         uint256 amount,
         uint256 duration,
         uint256 count
-    ) internal {
+    ) internal returns (uint256 tokenId) {
         vm.warp(timestamp);
 
         // pre-checks
@@ -185,15 +279,16 @@ contract TapTokenTest is Test {
         uint256 weekDiff = twTap.currentWeek() - twTap.lastProcessedWeek();
         if (weekDiff != 0) {
             twTap.advanceWeek(weekDiff);
+            console.log("Adavnced by", weekDiff, "weeks");
         }
 
         if (operation == 1) {
             deal(address(tapToken), user, amount);
             vm.startPrank(user);
             tapToken.approve(address(pearlmit), type(uint256).max);
-            uint256 tokenId = twTap.participate(user, amount, duration);
+            tokenId = twTap.participate(user, amount, duration);
             vm.stopPrank();
-            console.log("Line ", count, "procesed. Participated Id: ", tokenId);
+            console.log("Line ", count, "processed. Participated Id: ", tokenId);
         } else if (operation == 2) {
             twTap.exitPosition(uint160(user));
             console.log("Line ", count, "processed. Exited: ", uint160(user));
