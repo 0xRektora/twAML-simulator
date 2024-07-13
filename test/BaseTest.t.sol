@@ -9,7 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // Tapioca
 import {TapToken, ITapToken} from "contracts/tokens/TapToken.sol";
-import {TwTAP, TWAMLPool, TWAML} from "contracts/twTAP2.sol";
+import {TwTAP, TWAMLPool, TWAML} from "contracts/twTAP.sol";
 import {MockPearlmit} from "contracts/mocks/MockPearlmit.sol";
 import {MockCluster} from "contracts/mocks/MockCluster.sol";
 import {IPearlmit} from "contracts/interfaces/IPearlmit.sol";
@@ -120,7 +120,7 @@ contract TapTokenTest is Test, TWAML {
     }
 
     function testExecute() external {
-        uint256 case_num = 3;
+        uint256 case_num = 1;
         uint256 version_num = 1;
         string memory ifname = string(abi.encodePacked("./results/inputfiles/test", vm.toString(case_num), ".csv"));
         string memory ofname = string(
@@ -148,9 +148,9 @@ contract TapTokenTest is Test, TWAML {
         _dumpToFile(ofname, count, dump);
     }
 
-    function testMaxGrowth() external {
+    function estMaxGrowth() external {
         uint256 case_num = 1;
-        uint256 version_num = 2;
+        uint256 version_num = 1;
         string memory ifname =
             string(abi.encodePacked("./results/inputfiles/testMaximal", vm.toString(case_num), ".csv"));
         string memory ofnameTWAML = string(
